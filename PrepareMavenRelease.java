@@ -15,27 +15,65 @@ import java.util.stream.Stream;
 
 class PrepareMavenRelease
 {
-    private static final Set<String> MAVEN_RELEASE_ARTIFACTS = Set.of(
-            "io.trino:trino-root:pom",
-            "io.trino:trino-root:pom.asc",
+    private enum ArtifactType
+    {
+        POM, // .pom, .pom.asc
+        MAIN, // .pom, .pom.asc, .jar, .jar.asc, -sources.jar, -sources.jar.asc, -javadoc.jar, -javadoc.jar.asc
+        TESTS, // .pom, .pom.asc, -tests.jar, -tests.jar.asc, -test-sources.jar, -test-sources.jar.asc
+    }
 
-            "io.trino:trino-jdbc:pom",
-            "io.trino:trino-jdbc:jar",
-            "io.trino:trino-jdbc:jar:sources",
-            "io.trino:trino-jdbc:jar:javadoc",
-            "io.trino:trino-jdbc:pom.asc",
-            "io.trino:trino-jdbc:jar.asc",
-            "io.trino:trino-jdbc:jar.asc:sources",
-            "io.trino:trino-jdbc:jar.asc:javadoc",
+    record ReleaseSpec(String groupId, String artifactId, List<ArtifactType> artifactTypes) { }
 
-            "io.trino:trino-spi:pom",
-            "io.trino:trino-spi:jar",
-            "io.trino:trino-spi:jar:sources",
-            "io.trino:trino-spi:jar:javadoc",
-            "io.trino:trino-spi:pom.asc",
-            "io.trino:trino-spi:jar.asc",
-            "io.trino:trino-spi:jar.asc:sources",
-            "io.trino:trino-spi:jar.asc:javadoc"
+    private static final Set<ReleaseSpec> MAVEN_RELEASE_ARTIFACTS = Set.of(
+            new ReleaseSpec("io.trino", "trino-root", List.of(ArtifactType.POM)),
+            new ReleaseSpec("io.trino", "trino-spi", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-jdbc", List.of(ArtifactType.MAIN, ArtifactType.TESTS)), // jdbc tests jar are used in jdbc backward compatibility tests
+
+            new ReleaseSpec("io.trino", "trino-plugin-toolkit", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-matching", List.of(ArtifactType.MAIN)),
+
+            new ReleaseSpec("io.trino", "trino-base-jdbc", List.of(ArtifactType.MAIN, ArtifactType.TESTS)),
+
+            // trino-main and dependencies. Some third party projects depend on these against best practices
+            new ReleaseSpec("io.trino", "trino-main", List.of(ArtifactType.MAIN, ArtifactType.TESTS)),
+            new ReleaseSpec("io.trino", "trino-array", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-cache", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-client", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-geospatial-toolkit", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-memory-context", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-parser", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-grammar", List.of(ArtifactType.MAIN)),
+
+            // trino-testing and dependencies. Some third party projects depend on these against best practices
+            new ReleaseSpec("io.trino", "trino-testing", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-testing-containers", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-testing-services", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-memory", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-tpch", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-web-ui", List.of(ArtifactType.MAIN)),
+
+            new ReleaseSpec("io.trino", "trino-tpcds", List.of(ArtifactType.MAIN)),
+
+            new ReleaseSpec("io.trino", "trino-filesystem", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-hdfs", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-orc", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-parquet", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-manager", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-alluxio", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-azure", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-cache-alluxio", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-gcs", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-filesystem-s3", List.of(ArtifactType.MAIN)),
+
+            new ReleaseSpec("io.trino", "trino-metastore", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-exchange-filesystem", List.of(ArtifactType.MAIN, ArtifactType.TESTS)),
+
+            new ReleaseSpec("io.trino", "trino-record-decoder", List.of(ArtifactType.MAIN)),
+
+            new ReleaseSpec("io.trino", "trino-functions-python", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-iceberg", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-hive", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-hive-formats", List.of(ArtifactType.MAIN))
     );
 
     private static final Path META_DIR = Path.of(".meta");
@@ -189,10 +227,9 @@ class PrepareMavenRelease
         return updated;
     }
 
-    private static List<MetadataEntry> processMetadata(List<MetadataEntry> metadata, Set<String> releaseArtifacts)
+    private static List<MetadataEntry> filterMetadata(List<MetadataEntry> metadata, Set<MavenCoordinate> releaseArtifacts)
     {
         Set<MavenCoordinate> candidates = releaseArtifacts.stream()
-                .map(PrepareMavenRelease::parseCoordinates)
                 .map(value -> new MavenCoordinate(
                         value.groupId(),
                         value.artifactId(),
@@ -215,7 +252,7 @@ class PrepareMavenRelease
                 .toList();
     }
 
-    private static List<Artifact> processArtifacts(List<Artifact> artifacts, Set<String> releaseModules)
+    private static List<Artifact> filterArtifacts(List<Artifact> artifacts, Set<MavenCoordinate> releaseModules)
     {
         return artifacts.stream()
                 .filter(artifact -> {
@@ -226,7 +263,7 @@ class PrepareMavenRelease
                             artifact.coordinate().classifier(),
                             Optional.empty());
 
-                    return releaseModules.contains(canonical.toString());
+                    return releaseModules.contains(canonical);
                 })
                 .toList();
     }
@@ -323,7 +360,7 @@ class PrepareMavenRelease
         }
 
         Properties properties = loadRepoProperties(repoPropertiesPath);
-        List<Artifact> artifacts = loadArtifacts(artifactsPath);
+        List<Artifact> artifactManifest = loadArtifacts(artifactsPath);
         List<MetadataEntry> metadata = loadMetadata(metadataPath);
 
         List<Checksum> checksums = parseChecksums(properties.getProperty("checksumAlgorithmFactories"));
@@ -331,9 +368,10 @@ class PrepareMavenRelease
                 .map(value -> value.substring(1)) // skip leading ".")
                 .collect(Collectors.toSet());
 
+        Set<MavenCoordinate> artifacts = deriveArtifacts(MAVEN_RELEASE_ARTIFACTS);
         Properties updatedProperties = processProperties(properties, arguments.outputRepoName());
-        List<MetadataEntry> updatedMetadata = processMetadata(metadata, MAVEN_RELEASE_ARTIFACTS);
-        List<Artifact> updatedArtifacts = processArtifacts(artifacts, MAVEN_RELEASE_ARTIFACTS);
+        List<MetadataEntry> updatedMetadata = filterMetadata(metadata, artifacts);
+        List<Artifact> updatedArtifacts = filterArtifacts(artifactManifest, artifacts);
 
         copyArtifacts(arguments.stagingDir(), outputDir, updatedArtifacts, updatedMetadata, checksums, skipChecksums, dryRun);
 
@@ -341,13 +379,44 @@ class PrepareMavenRelease
             if (!outputDir.resolve(META_DIR).toFile().mkdirs()) {
                 throw new IOException("Failed to create directory: " + outputDir.resolve(META_DIR));
             }
-            writeRepoProperties(outputDir.resolve(REPO_PROPERTIES), updatedProperties, dryRun);
-            writeMetadataManifest(outputDir.resolve(METADATA_MANIFEST), updatedMetadata, dryRun);
-            writeArtifactsManifest(outputDir.resolve(ARTIFACTS_MANIFEST), updatedArtifacts, dryRun);
+            writeRepoProperties(outputDir.resolve(REPO_PROPERTIES), updatedProperties);
+            writeMetadataManifest(outputDir.resolve(METADATA_MANIFEST), updatedMetadata);
+            writeArtifactsManifest(outputDir.resolve(ARTIFACTS_MANIFEST), updatedArtifacts);
         }
     }
 
-    private static void writeArtifactsManifest(Path path, List<Artifact> artifacts, boolean dryRun)
+    private static Set<MavenCoordinate> deriveArtifacts(Set<ReleaseSpec> specs)
+    {
+        return specs.stream().flatMap(spec ->
+                        spec.artifactTypes().stream()
+                                .map(type -> switch (type) {
+                                    case POM -> List.of(
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom.asc"), Optional.empty(), Optional.empty()));
+                                    case MAIN -> List.of(
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom.asc"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar.asc"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar"), Optional.of("sources"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar.asc"), Optional.of("sources"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar"), Optional.of("javadoc"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar.asc"), Optional.of("javadoc"), Optional.empty())
+                                    );
+                                    case TESTS -> List.of(
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("pom.asc"), Optional.empty(), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar"), Optional.of("tests"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar.asc"), Optional.of("tests"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar"), Optional.of("test-sources"), Optional.empty()),
+                                            new MavenCoordinate(spec.groupId(), spec.artifactId(), Optional.of("jar.asc"), Optional.of("test-sources"), Optional.empty())
+                                    );
+                                })
+                                .flatMap(List::stream))
+                .collect(Collectors.toSet());
+    }
+
+    private static void writeArtifactsManifest(Path path, List<Artifact> artifacts)
             throws IOException
     {
         try (PrintWriter out = new PrintWriter(new FileWriter(path.toFile()))) {
@@ -357,7 +426,7 @@ class PrepareMavenRelease
         }
     }
 
-    private static void writeMetadataManifest(Path path, List<MetadataEntry> metadata, boolean dryRun)
+    private static void writeMetadataManifest(Path path, List<MetadataEntry> metadata)
             throws IOException
     {
         try (PrintWriter out = new PrintWriter(new FileWriter(path.toFile()))) {
@@ -367,7 +436,7 @@ class PrepareMavenRelease
         }
     }
 
-    private static void writeRepoProperties(Path path, Properties properties, boolean dryRun)
+    private static void writeRepoProperties(Path path, Properties properties)
             throws IOException
     {
         try (FileWriter out = new FileWriter(path.toFile())) {
