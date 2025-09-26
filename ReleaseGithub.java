@@ -12,6 +12,14 @@
  * limitations under the License.
  */
 
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +36,10 @@ public class ReleaseGithub
     record Arguments(boolean dryRun, Path stagingPath, String tag) { }
 
     record Artifact(Path path, String name) { }
+
+    record PomInfo(String packaging) { }
+
+    record ReleaseInfo(String artifactId, String version) { }
 
     private static Arguments parseArguments(String[] args)
     {
@@ -61,19 +73,40 @@ public class ReleaseGithub
     {
         List<Artifact> artifacts = new ArrayList<>();
 
-        // find all zip files
+        // find all metadata.xml files and check for trino-plugin packaging
         try (var paths = Files.walk(repoPath)) {
-            paths.filter(path -> {
-                        String name = path.getFileName().toString();
-                        return name.startsWith("trino-") && name.endsWith(".zip");
-                    })
+            paths.filter(path -> path.getFileName().toString().equals("maven-metadata.xml"))
                     .forEach(path -> {
-                        // file name looks like: trino-<artifact>-<version>.zip
-                        // extract the name as "<artifact>", without version and extension
-                        String name = path.getFileName().toString();
-                        int firstDash = name.indexOf('-');
-                        int lastDash = name.lastIndexOf('-');
-                        artifacts.add(new Artifact(path, "plugins/" + name.substring(firstDash + 1, lastDash)));
+                        try {
+                            ReleaseInfo releaseInfo = parseMetadataFile(path);
+                            String artifactId = releaseInfo.artifactId();
+                            String version = releaseInfo.version();
+
+                            // Look for POM file in version directory: <version>/<artifactId>-<version>.pom
+                            Path releasePath = path.getParent().resolve(version);
+                            Path pom = releasePath.resolve(artifactId + "-" + version + ".pom");
+
+                            if (Files.exists(pom)) {
+                                PomInfo pomInfo = parsePomFile(pom);
+                                if ("trino-plugin".equals(pomInfo.packaging())) {
+                                    String zipFileName = artifactId + "-" + version + ".zip";
+                                    Path zipPath = releasePath.resolve(zipFileName);
+
+                                    if (Files.exists(zipPath)) {
+                                        artifacts.add(new Artifact(zipPath, "plugins/" + artifactId));
+                                    }
+                                    else {
+                                        System.err.println("Expected ZIP file not found: " + zipFileName + " in " + releasePath);
+                                    }
+                                }
+                            }
+                            else {
+                                System.err.println("Expected POM file not found: " + pom);
+                            }
+                        }
+                        catch (Exception e) {
+                            System.err.println("Error processing metadata file " + path + ": " + e.getMessage());
+                        }
                     });
         }
 
@@ -125,6 +158,49 @@ public class ReleaseGithub
             });
         }
         return artifacts;
+    }
+
+    private static PomInfo parsePomFile(Path pomPath)
+            throws ParserConfigurationException, IOException, SAXException
+    {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document document = builder.parse(pomPath.toFile());
+
+        String packaging = null;
+
+        // Extract packaging
+        NodeList packagingNodes = document.getElementsByTagName("packaging");
+        if (packagingNodes.getLength() > 0) {
+            packaging = packagingNodes.item(0).getTextContent();
+        }
+
+        return new PomInfo(packaging);
+    }
+
+    private static ReleaseInfo parseMetadataFile(Path metadataPath)
+            throws ParserConfigurationException, IOException, SAXException
+    {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document document = builder.parse(metadataPath.toFile());
+
+        String artifactId = null;
+        String releaseVersion = null;
+
+        // Extract artifactId
+        NodeList artifactIdNodes = document.getElementsByTagName("artifactId");
+        if (artifactIdNodes.getLength() > 0) {
+            artifactId = artifactIdNodes.item(0).getTextContent();
+        }
+
+        // Extract release version
+        NodeList releaseNodes = document.getElementsByTagName("release");
+        if (releaseNodes.getLength() > 0) {
+            releaseVersion = releaseNodes.item(0).getTextContent();
+        }
+
+        return new ReleaseInfo(artifactId, releaseVersion);
     }
 
     private static void createRelease(String tag, boolean dryRun)
