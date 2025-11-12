@@ -208,7 +208,11 @@ public class ReleaseGithub
     {
         System.out.println("Creating release " + tag);
         if (!dryRun) {
-            ProcessBuilder processBuilder = new ProcessBuilder("gh", "release", "create", tag, "-t", "Trino " + tag, "-R", "trinodb/trino", "--notes", "See https://trino.io/docs/current/release/release-" + tag + ".html")
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "gh", "release", "create", tag,
+                    "-t", "Trino " + tag,
+                    "-R", "trinodb/trino",
+                    "--notes", "See the [release notes](https://trino.io/docs/current/release/release-" + tag + ".html) or [download Trino](https://trino.io/download)")
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT);
             Process process = processBuilder.start();
