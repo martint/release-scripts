@@ -73,7 +73,8 @@ class PrepareMavenRelease
             new ReleaseSpec("io.trino", "trino-functions-python", List.of(ArtifactType.MAIN)),
             new ReleaseSpec("io.trino", "trino-iceberg", List.of(ArtifactType.MAIN)),
             new ReleaseSpec("io.trino", "trino-hive", List.of(ArtifactType.MAIN)),
-            new ReleaseSpec("io.trino", "trino-hive-formats", List.of(ArtifactType.MAIN))
+            new ReleaseSpec("io.trino", "trino-hive-formats", List.of(ArtifactType.MAIN)),
+            new ReleaseSpec("io.trino", "trino-hudi", List.of(ArtifactType.MAIN))
     );
 
     private static final Path META_DIR = Path.of(".meta");
